@@ -27,6 +27,7 @@ interface AvizoService : GLib.Object
 	public abstract bool focused_output { owned get; set; }
 	public abstract bool disable_progress { owned get; set; }
 	public abstract string text { owned get; set; }
+	public abstract string font { owned get; set; }
 	public abstract int font_size { owned get; set; }
 
 	public abstract void show(double seconds) throws DBusError, IOError;
@@ -63,7 +64,8 @@ public class AvizoClient : GLib.Application
 	private static bool _focused_output = false;
 	private static bool _disable_progress = false;
 	private static string _text = "";
-	private static int _font_size = 24;
+	private static string _font = "Sans Bold";
+	private static int _font_size = 16;
 
 	private static double _time = 5.0;
 
@@ -95,9 +97,10 @@ public class AvizoClient : GLib.Application
 		{ "time", 0, 0, OptionArg.DOUBLE, ref _time, "Sets the time to show the notification, default is 5", "DOUBLE" },
 		{ "monitor", 0, 0, OptionArg.INT, ref _monitor, "Sets the monitor to show the notification on, default is all", "INT" },
 		{ "focused-output", 0, 0, OptionArg.NONE, ref _focused_output, "Without --monitor, show the notification only on the focused output (Wayland)", null },
-		{ "disable-progress", 0, 0, OptionArg.NONE, ref _disable_progress, "Disable progress indicator", null },
-		{ "text", 0, 0, OptionArg.STRING, ref _text, "Sets the text in notification, work only if progress is disabled", "STRING" },
-		{ "font-size", 0, 0, OptionArg.INT, ref _font_size, "Sets the text font size", "INT" },
+		{ "disable-progress", 0, 0, OptionArg.NONE, ref _disable_progress, "Hides the progress indicator", null },
+		{ "text", 0, 0, OptionArg.STRING, ref _text, "Shows a line of text (e.g. the device name) under the image, above the progress indicator or in its place; ellipsized if too long", "STRING" },
+		{ "font", 0, 0, OptionArg.STRING, ref _font, "Sets the font of the text as a Pango font description, default is \"Sans Bold\"", "STRING" },
+		{ "font-size", 0, 0, OptionArg.INT, ref _font_size, "Sets the size of the text in px, default is 16 (0 uses the size in --font)", "INT" },
 		{ null }
 	};
 
@@ -212,6 +215,7 @@ public class AvizoClient : GLib.Application
 		_service.focused_output = _focused_output;
 
 		_service.text = _text;
+		_service.font = _font;
 		_service.font_size = _font_size;
 
 		if (_background != "")
