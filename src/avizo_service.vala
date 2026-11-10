@@ -51,6 +51,12 @@ public class AvizoWindow : Gtk.Window
 
 	public int monitor { get; set; }
 
+	public bool disable_progress { get; set; }
+
+	public string text { get; set; }
+
+	public int font_size { get; set; }
+
 	private int _width = 248;
 	public int width
 	{
@@ -386,7 +392,14 @@ public class AvizoWindow : Gtk.Window
 		Gdk.cairo_set_source_rgba(ctx, background);
 		draw_round_rect(ctx, border_width, border_width, _width - 2 * border_width, _height - 2 * border_width, int.max(border_radius - border_width, 0));
 
-		Gdk.cairo_set_source_rgba(ctx, bar_bg_color);
+		if (disable_progress)
+		{
+			Gdk.cairo_set_source_rgba(ctx, background);
+		}
+		else
+		{
+			Gdk.cairo_set_source_rgba(ctx, bar_bg_color);
+		}
 
 		for (int i = 0; i < block_count; i++)
 		{
@@ -396,26 +409,44 @@ public class AvizoWindow : Gtk.Window
 			               block_height);
 		}
 
-		Gdk.cairo_set_source_rgba(ctx, bar_fg_color);
-
-		if (block_spacing > 0)
+		if (!disable_progress)
 		{
-			for (int i = 0; i < (int) (block_count * progress); i++)
+			Gdk.cairo_set_source_rgba(ctx, bar_fg_color);
+
+			if (block_spacing > 0)
 			{
-				draw_rect(ctx, blocks_x + (block_width + block_spacing) * i,
+				for (int i = 0; i < (int) (block_count * progress); i++)
+				{
+					draw_rect(ctx, blocks_x + (block_width + block_spacing) * i,
+					               blocks_y,
+					               block_width,
+					               block_height);
+				}
+			}
+			else
+			{
+				var width = block_width * block_count * progress;
+				var height = block_height;
+				draw_rect(ctx, blocks_x,
 				               blocks_y,
-				               block_width,
-				               block_height);
+				               width,
+				               height);
 			}
 		}
-		else
+
+		// Draw text
+		if (disable_progress && text.length > 0)
 		{
-			var width = block_width * block_count * progress;
-			var height = block_height;
-			draw_rect(ctx, blocks_x,
-			               blocks_y,
-			               width,
-			               height);
+			ctx.select_font_face("Sans", Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
+			ctx.set_font_size(font_size);
+			Cairo.TextExtents extents;
+			ctx.text_extents(text, out extents);
+			double text_x = _width * 0.5 - (extents.width / 2 + extents.x_bearing);
+			double text_y = _height * 0.9;
+
+			ctx.move_to(text_x, text_y);
+			Gdk.cairo_set_source_rgba(ctx, bar_fg_color);
+			ctx.show_text(text);
 		}
 
 		ctx.set_operator(Cairo.Operator.OVER);
@@ -462,9 +493,9 @@ public class AvizoWindow : Gtk.Window
 public class AvizoService : GLib.Object
 {
 	private static string[] props = {
-		"image_opacity", "progress", "width", "height", "padding", "monitor",
+		"image_opacity", "progress", "disable_progress", "width", "height", "padding", "monitor",
 		"border_radius", "border_width", "block_height", "block_spacing", "block_count", "fade_in", "fade_out", "background", "border_color",
-		"bar_fg_color", "bar_bg_color", "x_offset", "y_offset",
+		"bar_fg_color", "bar_bg_color", "x_offset", "y_offset", "text", "font_size",
 	};
 
 	// Each notification shows the image that was set last: image_path or
@@ -528,6 +559,9 @@ public class AvizoService : GLib.Object
 	public Gdk.RGBA bar_bg_color { get; set; default = rgba(106, 106, 106, 0.8); }
 	public int monitor { get; set; default = -1; }
 	public bool focused_output { get; set; default = false; }
+	public bool disable_progress { get; set; default = false; }
+	public string text { get; set; default = ""; }
+	public int font_size { get; set; default = 24; }
 
 	private Array<AvizoWindow> _windows = new Array<AvizoWindow>();
 	private int _open_timeouts = 0;
