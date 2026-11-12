@@ -1,3 +1,11 @@
+regolith-avizo (0.1.7) focal; urgency=medium
+
+  [ rego-port-bot ]
+  * fix(packaging): build regolith-avizo as Architecture: any
+  * fix(volumectl): accept -M and -h after the command
+
+ -- Regolith Linux <regolith.linux@gmail.com>  Thu, 12 Nov 2026 07:49:30 -0800
+
 regolith-avizo (0.1.6) focal; urgency=medium
 
   [ Sivecano ]
