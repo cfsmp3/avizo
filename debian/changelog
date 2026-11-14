@@ -1,3 +1,12 @@
+regolith-avizo (0.1.8) focal; urgency=medium
+
+  [ rego-port-bot ]
+  * fix(client): exit with the status of the command line
+  * fix(debian): don't fail the configure when light is missing
+  * fix(service): let the latest Show() decide when the notification hides
+
+ -- Regolith Linux <regolith.linux@gmail.com>  Sat, 14 Nov 2026 10:53:10 -0800
+
 regolith-avizo (0.1.7) focal; urgency=medium
 
   [ rego-port-bot ]
