@@ -117,6 +117,12 @@ public class AvizoWindow : Gtk.Window
 	public Gdk.RGBA bar_fg_muted_color { get; set; default = Gdk.RGBA(); }
 	public bool bar_fg_muted_color_set { get; set; }
 
+	// Above a progress of 1, the whole bar stands for overamplified_max (at
+	// least 1), and the filled part past the full mark is drawn in
+	// bar_fg_overamplified_color.
+	public double overamplified_max { get; set; default = 1.5; }
+	public Gdk.RGBA bar_fg_overamplified_color { get; set; default = Gdk.RGBA(); }
+
 	private new double opacity = 0;
 	private bool is_fade_in = true;
 	private int64 prev_frame_time = 0;
@@ -492,7 +498,11 @@ public class AvizoWindow : Gtk.Window
 			               block_height);
 		}
 
-		if (!disable_progress)
+		if (!disable_progress && progress > 1)
+		{
+			draw_overamplified_progress(ctx, block_width, blocks_x, blocks_y);
+		}
+		else if (!disable_progress)
 		{
 			Gdk.cairo_set_source_rgba(ctx, fill_color());
 
@@ -508,7 +518,7 @@ public class AvizoWindow : Gtk.Window
 			}
 			else
 			{
-				var width = block_width * block_count * progress;
+				var width = block_width * block_count * double.max(progress, 0);
 				var height = block_height;
 				draw_rect(ctx, blocks_x,
 				               blocks_y,
@@ -529,6 +539,66 @@ public class AvizoWindow : Gtk.Window
 		}
 
 		return false;
+	}
+
+	// Draws a progress above 1: the whole bar stands for overamplified_max
+	// (at least 1), and the filled part past the full mark (1 / maximum of
+	// the bar) is in the overamplified colour.
+	private void draw_overamplified_progress(Cairo.Context ctx, double block_width,
+	                                         double blocks_x, double blocks_y)
+	{
+		double maximum = double.max(overamplified_max, 1);
+		double value = double.min(progress, maximum);
+
+		if (block_spacing > 0)
+		{
+			int filled = (int) (block_count * value / maximum);
+			for (int i = 0; i < filled; i++)
+			{
+				var x = blocks_x + (block_width + block_spacing) * i;
+				if ((i + 1) * maximum > block_count)
+				{
+					draw_overamplified_rect(ctx, x, blocks_y, block_width, block_height);
+				}
+				else
+				{
+					Gdk.cairo_set_source_rgba(ctx, fill_color());
+					draw_rect(ctx, x, blocks_y, block_width, block_height);
+				}
+			}
+		}
+		else
+		{
+			var total = block_width * block_count;
+			var filled = total * value / maximum;
+			var mark = total / maximum;
+
+			// Whole pixels: the overamplified colour does not bleed into the
+			// unfilled part, nor the background into the full mark.
+			ctx.save();
+			ctx.set_antialias(Cairo.Antialias.NONE);
+			Gdk.cairo_set_source_rgba(ctx, fill_color());
+			draw_rect(ctx, blocks_x, blocks_y, double.min(filled, mark), block_height);
+			if (filled > mark)
+			{
+				draw_overamplified_rect(ctx, blocks_x + mark, blocks_y, filled - mark, block_height);
+			}
+			ctx.restore();
+		}
+	}
+
+	// Paints a part of the bar past the full mark. The overamplified colour is
+	// laid over the background colour of the notification, so a translucent
+	// colour mixes with that background rather than leaving the bar
+	// see-through there.
+	private void draw_overamplified_rect(Cairo.Context ctx, double x, double y, double w, double h)
+	{
+		Gdk.cairo_set_source_rgba(ctx, background);
+		draw_rect(ctx, x, y, w, h);
+		ctx.set_operator(Cairo.Operator.OVER);
+		Gdk.cairo_set_source_rgba(ctx, bar_fg_overamplified_color);
+		draw_rect(ctx, x, y, w, h);
+		ctx.set_operator(Cairo.Operator.SOURCE);
 	}
 
 	private void draw_rect(Cairo.Context ctx, double x, double y, double w, double h)
@@ -573,7 +643,8 @@ public class AvizoService : GLib.Object
 		"image_opacity", "progress", "disable_progress", "width", "height", "padding", "monitor",
 		"border_radius", "border_width", "block_height", "block_spacing", "block_count", "fade_in", "fade_out", "background", "border_color",
 		"bar_fg_color", "bar_bg_color", "x_offset", "y_offset", "text", "font", "font_size",
-		"muted", "bar_fg_muted_color", "bar_fg_muted_color_set",
+		"muted", "bar_fg_muted_color", "bar_fg_muted_color_set", "overamplified_max",
+		"bar_fg_overamplified_color",
 	};
 
 	// Each notification shows the image that was set last: image_path or
@@ -644,6 +715,8 @@ public class AvizoService : GLib.Object
 	public bool muted { get; set; default = false; }
 	public Gdk.RGBA bar_fg_muted_color { get; set; default = rgba(0, 0, 0, 0.8); }
 	public bool bar_fg_muted_color_set { get; set; default = false; }
+	public double overamplified_max { get; set; default = 1.5; }
+	public Gdk.RGBA bar_fg_overamplified_color { get; set; default = rgba(224, 27, 36, 0.8); }
 
 	private Array<AvizoWindow> _windows = new Array<AvizoWindow>();
 	private int _open_timeouts = 0;
