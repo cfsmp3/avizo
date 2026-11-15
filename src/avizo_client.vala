@@ -34,6 +34,8 @@ interface AvizoService : GLib.Object
 	public abstract bool bar_fg_muted_color_set { owned get; set; }
 	public abstract double overamplified_max { owned get; set; }
 	public abstract Gdk.RGBA bar_fg_overamplified_color { owned get; set; }
+	public abstract bool use_icon_theme { owned get; set; }
+	public abstract string icon_theme { owned get; set; }
 
 	public abstract void show(double seconds) throws DBusError, IOError;
 }
@@ -75,6 +77,8 @@ public class AvizoClient : GLib.Application
 	private static string _bar_fg_muted_color = "";
 	private static double _overamplified_max = 1.5;
 	private static string _bar_fg_overamplified_color = "rgba(224, 27, 36, 0.8)";
+	private static bool _use_icon_theme = false;
+	private static string _icon_theme = "";
 
 	private static double _time = 5.0;
 
@@ -114,6 +118,8 @@ public class AvizoClient : GLib.Application
 		{ "bar-fg-muted-color", 0, 0, OptionArg.STRING, ref _bar_fg_muted_color, "Sets the color of the filled bar blocks for a muted device in format rgba([0, 255], [0, 255], [0, 255], [0, 1]), unset by default (--bar-fg-color is used)", "STRING" },
 		{ "overamplified-max", 0, 0, OptionArg.DOUBLE, ref _overamplified_max, "Sets the progress the whole bar stands for when the progress is above 1, default is 1.5 (values below 1 count as 1)", "DOUBLE" },
 		{ "bar-fg-overamplified-color", 0, 0, OptionArg.STRING, ref _bar_fg_overamplified_color, "Sets the color of the filled bar past the full mark in format rgba([0, 255], [0, 255], [0, 255], [0, 1]), default is rgba(224, 27, 36, 0.8)", "STRING" },
+		{ "use-icon-theme", 0, 0, OptionArg.NONE, ref _use_icon_theme, "Shows the pictures of the icon theme in the color of the bar instead of the built-in images", null },
+		{ "icon-theme", 0, 0, OptionArg.STRING, ref _icon_theme, "Sets the icon theme for --use-icon-theme, default is the desktop's", "STRING" },
 		{ null }
 	};
 
@@ -240,6 +246,8 @@ public class AvizoClient : GLib.Application
 		}
 		_service.overamplified_max = _overamplified_max;
 		_service.bar_fg_overamplified_color = parse_rgba(_bar_fg_overamplified_color);
+		_service.use_icon_theme = _use_icon_theme;
+		_service.icon_theme = _icon_theme;
 
 		if (_background != "")
 		{

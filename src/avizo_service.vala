@@ -16,7 +16,7 @@ public class AvizoWindow : Gtk.Window
 			{
 				_image_path = value;
 				_image_resource = "";
-				update_image();
+				queue_update_image();
 			}
 		}
 	}
@@ -30,7 +30,7 @@ public class AvizoWindow : Gtk.Window
 			{
 				_image_resource = value;
 				_image_path = "";
-				update_image();
+				queue_update_image();
 			}
 		}
 	}
@@ -123,12 +123,18 @@ public class AvizoWindow : Gtk.Window
 	public double overamplified_max { get; set; default = 1.5; }
 	public Gdk.RGBA bar_fg_overamplified_color { get; set; default = Gdk.RGBA(); }
 
+	// Show the pictures of the icon theme (icon_theme, or the desktop's if it
+	// is empty) in place of the built-in images that have one.
+	public bool use_icon_theme { get; set; }
+	public string icon_theme { get; set; default = ""; }
+
 	private new double opacity = 0;
 	private bool is_fade_in = true;
 	private int64 prev_frame_time = 0;
 	private uint prev_callback_id = 0;
 	private bool on_focused_output = false;
 	private uint place_timeout_id = 0;
+	private uint update_image_id = 0;
 
 	[GtkChild]
 	private unowned Gtk.Image image;
@@ -157,6 +163,25 @@ public class AvizoWindow : Gtk.Window
 				case "border-width":
 				case "block-height":
 					update_image_space();
+					break;
+				// A theme picture depends on the progress (above 1 or not)
+				// and takes the colour of the bar.
+				case "progress":
+				case "muted":
+				case "bar-fg-color":
+				case "bar-fg-muted-color":
+				case "bar-fg-muted-color-set":
+				case "icon-theme":
+					if (use_icon_theme && _image_resource != "")
+					{
+						queue_update_image();
+					}
+					break;
+				case "use-icon-theme":
+					if (_image_resource != "")
+					{
+						queue_update_image();
+					}
 					break;
 			}
 		});
@@ -219,6 +244,21 @@ public class AvizoWindow : Gtk.Window
 		return muted && bar_fg_muted_color_set ? bar_fg_muted_color : bar_fg_color;
 	}
 
+	// Updates the image once the properties that a call sets have all arrived,
+	// before the next frame is drawn.
+	private void queue_update_image()
+	{
+		if (update_image_id == 0)
+		{
+			update_image_id = Idle.add_full(Priority.HIGH_IDLE, () =>
+			{
+				update_image_id = 0;
+				update_image();
+				return Source.REMOVE;
+			});
+		}
+	}
+
 	// Renders the image at the output's scale factor, so that it stays sharp on
 	// scaled outputs (GTK draws a plain pixbuf at scale 1 and stretches it).
 	private void update_image()
@@ -232,6 +272,15 @@ public class AvizoWindow : Gtk.Window
 			{
 				var path = @"/org/danb/avizo/data/images/$(_image_resource)";
 				var natural = new Gdk.Pixbuf.from_resource(path + ".png");
+				if (use_icon_theme)
+				{
+					var surface = render_theme_icon(_image_resource, scale);
+					if (surface != null)
+					{
+						image.set_from_surface(surface);
+						return;
+					}
+				}
 				pixbuf = natural;
 				if (scale > 1)
 				{
@@ -267,6 +316,194 @@ public class AvizoWindow : Gtk.Window
 		{
 			image.set_from_surface(Gdk.cairo_surface_create_from_pixbuf(pixbuf, scale, null));
 		}
+	}
+
+	// The icon names of the theme pictures for a built-in image, in the order
+	// to try them; empty if there are none.
+	private string[] theme_icon_names(string resource)
+	{
+		var name = resource.has_suffix("_dark") ? resource.substring(0, resource.length - 5) : resource;
+		switch (name)
+		{
+			case "volume_muted":
+				return { "audio-volume-muted-symbolic" };
+			case "volume_low":
+				return { "audio-volume-low-symbolic" };
+			case "volume_medium":
+				return { "audio-volume-medium-symbolic" };
+			case "volume_high":
+				if (progress > 1)
+				{
+					return { "audio-volume-overamplified-symbolic", "audio-volume-high-symbolic" };
+				}
+				return { "audio-volume-high-symbolic" };
+			case "mic_muted":
+				return { "microphone-sensitivity-muted-symbolic" };
+			case "mic_unmuted":
+				return { "microphone-sensitivity-high-symbolic" };
+			case "brightness_low":
+				return { "display-brightness-low-symbolic", "display-brightness-symbolic" };
+			case "brightness_medium":
+				return { "display-brightness-medium-symbolic", "display-brightness-symbolic" };
+			case "brightness_high":
+				return { "display-brightness-high-symbolic", "display-brightness-symbolic" };
+			default:
+				return {};
+		}
+	}
+
+	// Renders the theme picture for a built-in image at the given scale, in the
+	// colour of the bar; null if the theme has none. Theme icons are drawn on
+	// one grid, so all of them get one size: that of the built-in full volume
+	// image (80x76), where the built-in images are shown.
+	private const int THEME_ICON_SIZE = 76;
+
+	private Cairo.Surface? render_theme_icon(string resource, int scale)
+	{
+		var name = icon_theme;
+		if (name == null || name == "")
+		{
+			name = Gtk.Settings.get_for_screen(get_screen()).gtk_icon_theme_name;
+		}
+		var theme = create_icon_theme(name);
+		var dirs = theme_dirs(theme, name ?? "");
+		Gtk.IconTheme? hicolor = null;
+
+		int size = THEME_ICON_SIZE;
+		foreach (var icon_name in theme_icon_names(resource))
+		{
+			var info = theme.lookup_icon_for_scale(icon_name, size, scale, Gtk.IconLookupFlags.FORCE_SIZE);
+			if (info != null && !in_dirs(info.get_filename(), dirs))
+			{
+				// GTK looks in its own default theme (Adwaita) before hicolor,
+				// but that one only counts if the theme inherits from it: look
+				// in hicolor alone before taking the icon as absent.
+				if (hicolor == null)
+				{
+					hicolor = create_icon_theme("hicolor");
+				}
+				info = hicolor.lookup_icon_for_scale(icon_name, size, scale, Gtk.IconLookupFlags.FORCE_SIZE);
+				if (info != null && !in_dirs(info.get_filename(), dirs))
+				{
+					info = null;
+				}
+			}
+			if (info == null)
+			{
+				continue;
+			}
+
+			Gdk.Pixbuf icon;
+			try
+			{
+				icon = info.load_icon();
+			}
+			catch (Error e)
+			{
+				warning("Could not load icon %s: %s", icon_name, e.message);
+				continue;
+			}
+
+			// The icon is a shape: paint it in the colour of the bar, centred
+			// in a square of the one size (whatever the built-in image's size).
+			var surface = new Cairo.ImageSurface(Cairo.Format.ARGB32, size * scale, size * scale);
+			var ctx = new Cairo.Context(surface);
+			var mask = Gdk.cairo_surface_create_from_pixbuf(icon, 1, null);
+			Gdk.cairo_set_source_rgba(ctx, fill_color());
+			ctx.mask_surface(mask, (size * scale - icon.width) / 2.0, (size * scale - icon.height) / 2.0);
+			surface.set_device_scale(scale, scale);
+			return surface;
+		}
+		return null;
+	}
+
+	// A fresh theme each time: it follows a change of the desktop theme and
+	// sees themes installed since the last notification. Without a name, it is
+	// the desktop's theme.
+	private Gtk.IconTheme create_icon_theme(string? name)
+	{
+		var theme = new Gtk.IconTheme();
+		theme.set_screen(get_screen());
+		if (name != null && name != "")
+		{
+			theme.set_custom_theme(name);
+		}
+		return theme;
+	}
+
+	// The directories of the theme, of the themes it inherits from, and of
+	// hicolor (which every theme falls back to). GTK also falls back to its
+	// own default theme (Adwaita) and built-in images, which are not the
+	// theme's. As in GTK, the index.theme of a theme is the first one in the
+	// search path, and its icons may be in any of the search path's folders.
+	private static string[] theme_dirs(Gtk.IconTheme theme, string name)
+	{
+		string[] search_path;
+		theme.get_search_path(out search_path);
+
+		string[] names = { name, "hicolor" };
+		string[] dirs = {};
+		for (int i = 0; i < names.length; i++)
+		{
+			if (names[i] == "")
+			{
+				continue;
+			}
+
+			KeyFile? index = null;
+			foreach (var base_dir in search_path)
+			{
+				var file = new KeyFile();
+				try
+				{
+					file.load_from_file(Path.build_filename(base_dir, names[i], "index.theme"), KeyFileFlags.NONE);
+				}
+				catch (Error e)
+				{
+					continue;
+				}
+				index = file;
+				break;
+			}
+			if (index == null)
+			{
+				continue;
+			}
+
+			foreach (var base_dir in search_path)
+			{
+				dirs += Path.build_filename(base_dir, names[i]) + "/";
+			}
+			try
+			{
+				foreach (var parent in index.get_string_list("Icon Theme", "Inherits"))
+				{
+					if (!(parent in names))
+					{
+						names += parent;
+					}
+				}
+			}
+			catch (Error e)
+			{
+			}
+		}
+		return dirs;
+	}
+
+	private static bool in_dirs(string? filename, string[] dirs)
+	{
+		if (filename != null)
+		{
+			foreach (var dir in dirs)
+			{
+				if (filename.has_prefix(dir))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	// Renders the SVG source of a built-in image so that it lines up with the
@@ -644,7 +881,7 @@ public class AvizoService : GLib.Object
 		"border_radius", "border_width", "block_height", "block_spacing", "block_count", "fade_in", "fade_out", "background", "border_color",
 		"bar_fg_color", "bar_bg_color", "x_offset", "y_offset", "text", "font", "font_size",
 		"muted", "bar_fg_muted_color", "bar_fg_muted_color_set", "overamplified_max",
-		"bar_fg_overamplified_color",
+		"bar_fg_overamplified_color", "use_icon_theme", "icon_theme",
 	};
 
 	// Each notification shows the image that was set last: image_path or
@@ -717,6 +954,8 @@ public class AvizoService : GLib.Object
 	public bool bar_fg_muted_color_set { get; set; default = false; }
 	public double overamplified_max { get; set; default = 1.5; }
 	public Gdk.RGBA bar_fg_overamplified_color { get; set; default = rgba(224, 27, 36, 0.8); }
+	public bool use_icon_theme { get; set; default = false; }
+	public string icon_theme { get; set; default = ""; }
 
 	private Array<AvizoWindow> _windows = new Array<AvizoWindow>();
 	private int _open_timeouts = 0;
