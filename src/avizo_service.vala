@@ -111,6 +111,12 @@ public class AvizoWindow : Gtk.Window
 	public Gdk.RGBA bar_fg_color { get; set; default = Gdk.RGBA(); }
 	public Gdk.RGBA bar_bg_color { get; set; default = Gdk.RGBA(); }
 
+	// Whether the notification is for a muted device: the filled part of the
+	// bar (and a theme picture) then uses bar_fg_muted_color, if that is set.
+	public bool muted { get; set; }
+	public Gdk.RGBA bar_fg_muted_color { get; set; default = Gdk.RGBA(); }
+	public bool bar_fg_muted_color_set { get; set; }
+
 	private new double opacity = 0;
 	private bool is_fade_in = true;
 	private int64 prev_frame_time = 0;
@@ -198,6 +204,13 @@ public class AvizoWindow : Gtk.Window
 		{
 			image.margin_bottom = margin;
 		}
+	}
+
+	// The colour of the filled part of the bar up to the full mark, which a
+	// theme picture takes too.
+	private Gdk.RGBA fill_color()
+	{
+		return muted && bar_fg_muted_color_set ? bar_fg_muted_color : bar_fg_color;
 	}
 
 	// Renders the image at the output's scale factor, so that it stays sharp on
@@ -481,7 +494,7 @@ public class AvizoWindow : Gtk.Window
 
 		if (!disable_progress)
 		{
-			Gdk.cairo_set_source_rgba(ctx, bar_fg_color);
+			Gdk.cairo_set_source_rgba(ctx, fill_color());
 
 			if (block_spacing > 0)
 			{
@@ -560,6 +573,7 @@ public class AvizoService : GLib.Object
 		"image_opacity", "progress", "disable_progress", "width", "height", "padding", "monitor",
 		"border_radius", "border_width", "block_height", "block_spacing", "block_count", "fade_in", "fade_out", "background", "border_color",
 		"bar_fg_color", "bar_bg_color", "x_offset", "y_offset", "text", "font", "font_size",
+		"muted", "bar_fg_muted_color", "bar_fg_muted_color_set",
 	};
 
 	// Each notification shows the image that was set last: image_path or
@@ -627,6 +641,9 @@ public class AvizoService : GLib.Object
 	public string text { get; set; default = ""; }
 	public string font { get; set; default = "Sans Bold"; }
 	public int font_size { get; set; default = 16; }
+	public bool muted { get; set; default = false; }
+	public Gdk.RGBA bar_fg_muted_color { get; set; default = rgba(0, 0, 0, 0.8); }
+	public bool bar_fg_muted_color_set { get; set; default = false; }
 
 	private Array<AvizoWindow> _windows = new Array<AvizoWindow>();
 	private int _open_timeouts = 0;

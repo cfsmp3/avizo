@@ -29,6 +29,9 @@ interface AvizoService : GLib.Object
 	public abstract string text { owned get; set; }
 	public abstract string font { owned get; set; }
 	public abstract int font_size { owned get; set; }
+	public abstract bool muted { owned get; set; }
+	public abstract Gdk.RGBA bar_fg_muted_color { owned get; set; }
+	public abstract bool bar_fg_muted_color_set { owned get; set; }
 
 	public abstract void show(double seconds) throws DBusError, IOError;
 }
@@ -66,6 +69,8 @@ public class AvizoClient : GLib.Application
 	private static string _text = "";
 	private static string _font = "Sans Bold";
 	private static int _font_size = 16;
+	private static bool _muted = false;
+	private static string _bar_fg_muted_color = "";
 
 	private static double _time = 5.0;
 
@@ -101,6 +106,8 @@ public class AvizoClient : GLib.Application
 		{ "text", 0, 0, OptionArg.STRING, ref _text, "Shows a line of text (e.g. the device name) under the image, above the progress indicator or in its place; ellipsized if too long", "STRING" },
 		{ "font", 0, 0, OptionArg.STRING, ref _font, "Sets the font of the text as a Pango font description, default is \"Sans Bold\"", "STRING" },
 		{ "font-size", 0, 0, OptionArg.INT, ref _font_size, "Sets the size of the text in px, default is 16 (0 uses the size in --font)", "INT" },
+		{ "muted", 0, 0, OptionArg.NONE, ref _muted, "Shows this notification as one for a muted device (in --bar-fg-muted-color, if set)", null },
+		{ "bar-fg-muted-color", 0, 0, OptionArg.STRING, ref _bar_fg_muted_color, "Sets the color of the filled bar blocks for a muted device in format rgba([0, 255], [0, 255], [0, 255], [0, 1]), unset by default (--bar-fg-color is used)", "STRING" },
 		{ null }
 	};
 
@@ -217,6 +224,14 @@ public class AvizoClient : GLib.Application
 		_service.text = _text;
 		_service.font = _font;
 		_service.font_size = _font_size;
+
+		// These apply to this notification only, so they are always sent.
+		_service.muted = _muted;
+		_service.bar_fg_muted_color_set = _bar_fg_muted_color != "";
+		if (_bar_fg_muted_color != "")
+		{
+			_service.bar_fg_muted_color = parse_rgba(_bar_fg_muted_color);
+		}
 
 		if (_background != "")
 		{

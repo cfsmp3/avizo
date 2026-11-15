@@ -654,6 +654,9 @@ if [ "$monitor" = focused ]; then
 else
 	set -- --monitor="$monitor"
 fi
+if [ "$muted" -gt "0" ]; then
+	set -- "$@" --muted
+fi
 if [ -n "$name_device" ]; then
 	label=$(device_label "$dev") || label=''
 	if [ -n "$label" ]; then
