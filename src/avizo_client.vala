@@ -325,6 +325,12 @@ Gdk.RGBA parse_rgba(string value)
 
 public void main(string[] args)
 {
+	// Option values are converted from the locale's encoding, which GLib only
+	// knows once the locale is set: without this, a --text beyond plain ASCII
+	// (such as "Headphones – USB Headset" or a name in another alphabet) is
+	// rejected before any notification is shown.
+	Intl.setlocale(LocaleCategory.ALL, "");
+
 	AvizoClient client = new AvizoClient();
 	client.run(args);
 }
